@@ -9,9 +9,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 
-	//"github.com/aws/aws-sdk-go-v2/aws"
-	//"github.com/aws/aws-sdk-go-v2/credentials"
-	//"github.com/aws/aws-sdk-go-v2/service/s3"
 	"log"
 	"os"
 	"os/exec"
@@ -22,9 +19,11 @@ import (
 //ffmpeg aws lambda layer 层： https://github.com/rpidanny/ffmpeg-lambda-layer
 
 //水印在s3里面存放的前缀目录，比如以前的key=feed/sss.jpg ; 需要拼接为 key=watermark/feed/sss.jpg
+//The prefix directory where the watermark is stored in s3, such as the previous key=feed/sss.jpg; It needs to be spliced as key=watermark/feed/sss.jpg
 var watermarkPrefixPath = "watermark/"
 
-//图片下载和生成的存放目录
+//视频下载和生成的存放目录
+//Storage directory for video download and generation
 var savePath = "/tmp"
 
 // RequestData 请求的json数据
@@ -38,7 +37,7 @@ var (
 	s3Bucket  = ""
 	awsAk     = ""
 	awsSk     = ""
-	cdnDomain = "" //域名
+	cdnDomain = "" //域名 domain
 	awsRegion = "" //region
 )
 
@@ -54,27 +53,32 @@ func init() {
 	//获取s3桶名
 	s3Bucket = os.Getenv("Bucket")
 	if s3Bucket == "" {
-		log.Println("你还没有配置S3的桶名")
+		//你还没有配置S3的桶名
+		log.Fatalln("You haven't configured S3 bucket name")
 		return
 	}
 	awsAk = os.Getenv("AwsAccessKey")
 	if awsAk == "" {
-		log.Println("你还没有aws ak")
+		//你还没有aws ak
+		log.Fatalln("You haven't aws ak yet")
 		return
 	}
 	awsSk = os.Getenv("AwsSecretKey")
 	if awsSk == "" {
-		log.Println("你还没有aws sk")
+		//你还没有aws sk
+		log.Fatalln("You don't have aws sk")
 		return
 	}
 	cdnDomain = os.Getenv("CdnDomain")
 	//if cdnDomain == "" {
-	//	log.Println("你还没有CdnDomain")
+	//  你还没有CdnDomain
+	//	log.Fatalln("You don't have Cdn Domain")
 	//	return
 	//}
 	awsRegion = os.Getenv("AwsRegion")
 	if awsRegion == "" {
-		log.Println("你还没有配置aws region")
+		//你还没有配置aws region
+		log.Fatalln("You haven't configured aws region")
 		return
 	}
 }
@@ -87,7 +91,7 @@ func HandleLambdaEvent(event RequestData) (ResponseData, error) {
 	//ffmpeg -i "https://cdn.google.live/video/75an099hrpb6od35elqopnceah-1670826684781993072384.mp4" -i "https://cdn.google.live/lambda/soundmate-logo%401x.png"  -filter_complex "overlay=10:10" 1.mp4
 	key := event.Key
 	//videoUrl := "https://cdn.google.live/video/75an099hrpb6od35elqopnceah-1670826684781993072384.mp4"
-	//下载到临时文件夹
+	//下载到临时文件夹(Download to temporary folder)
 	log.Println("#####start video url=" + key)
 	tmpPath := savePath + "/tmp-" + path.Base(key)
 	errDownload := downFileFromAwsS3(key, tmpPath)
@@ -116,6 +120,7 @@ func HandleLambdaEvent(event RequestData) (ResponseData, error) {
 
 /**
  *  上传到s3
+ *  Upload to s3
  */
 func upLoadToAwsS3(newSavePath string, oldS3Key string) string {
 	//s3
@@ -147,6 +152,7 @@ func upLoadToAwsS3(newSavePath string, oldS3Key string) string {
 
 /**
  * 下载aws s3中的文件
+ * Download files in aws s3
  */
 func downFileFromAwsS3(key string, tmpPath string) (err error) {
 	sess := session.Must(session.NewSession(
@@ -156,7 +162,7 @@ func downFileFromAwsS3(key string, tmpPath string) (err error) {
 		}),
 	)
 	downloader := s3manager.NewDownloader(sess, func(d *s3manager.Downloader) {
-		d.PartSize = 10 * 1024 * 1024 // 64MB per part
+		d.PartSize = 10 * 1024 * 1024 // 10MB per part
 		d.Concurrency = 4
 	})
 	file, err := os.Create(tmpPath)
