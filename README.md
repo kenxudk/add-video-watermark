@@ -6,12 +6,12 @@ This project is an aws lambda function developed by goland voice, which is used 
 ### Lambda config
 ![img_1.png](img_1.png)
 ### Lambda >> configure >> Environment variables
-| 星期        |                  车次                   |
-| ------------- |:-------------------------------------:|
-| AwsAccessKey     |              You aws ak               |
-| AwsSecretKey  |              You aws sk               |
+| variables        |              Description               |
+| ------------- |:--------------------------------------:|
+| AwsAccessKey     |               You aws ak               |
+| AwsSecretKey  |               You aws sk               |
 |  AwsRegion   | The region where AWS ,like "us-east-1" |
-|  Bucket   |         Name of aws s3 bucket         |
+|  Bucket   |         Name of aws s3 bucket          |
 
 ### Build
 ```
