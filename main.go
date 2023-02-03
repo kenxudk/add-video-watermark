@@ -34,10 +34,10 @@ type RequestData struct {
 }
 
 var (
-	s3Bucket  = ""
-	awsAk     = ""
-	awsSk     = ""
-	cdnDomain = "" //域名 domain
+	s3Bucket = ""
+	awsAk    = ""
+	awsSk    = ""
+	//cdnDomain = "" //域名 domain
 	awsRegion = "" //region
 )
 
@@ -69,7 +69,7 @@ func init() {
 		log.Fatalln("You don't have aws sk")
 		return
 	}
-	cdnDomain = os.Getenv("CdnDomain")
+	//cdnDomain = os.Getenv("CdnDomain")
 	//if cdnDomain == "" {
 	//  你还没有CdnDomain
 	//	log.Fatalln("You don't have Cdn Domain")
@@ -88,7 +88,7 @@ func main() {
 }
 
 func HandleLambdaEvent(event RequestData) (ResponseData, error) {
-	//ffmpeg -i "https://cdn.google.live/video/75an099hrpb6od35elqopnceah-1670826684781993072384.mp4" -i "https://cdn.google.live/lambda/soundmate-logo%401x.png"  -filter_complex "overlay=10:10" 1.mp4
+	//ffmpeg -i "https://cdn.google.live/video/75an099hrpb6od35elqopnceah-1670826684781993072384.mp4" -i "https://cdn.google.live/lambda/google-logo%401x.png"  -filter_complex "overlay=10:10" 1.mp4
 	key := event.Key
 	//videoUrl := "https://cdn.google.live/video/75an099hrpb6od35elqopnceah-1670826684781993072384.mp4"
 	//下载到临时文件夹(Download to temporary folder)
