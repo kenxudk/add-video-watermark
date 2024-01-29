@@ -97,12 +97,12 @@ func HandleLambdaEvent(event RequestData) (ResponseData, error) {
 	key := event.Key
 	username := event.Name
 	log.Println("#####start video url=" + key + ",name=" + username)
-	logoUrl := savePath + "/assets/video-logo.png"
+	logoUrl := "./assets/video-logo.png"
 	if len(username) > 0 {
 		//logo下面有文字需要生成新的logo图片
 		t := logo.TextInfo{Text: username, Size: 15, YOffset: 6}
 		t.XOffset = len(t.Text) * 6
-		videoImgSource, err := os.Open("./assets/video-logo.png")
+		videoImgSource, err := os.Open(logoUrl)
 		if err != nil {
 			log.Fatalln("assets/video-logo.png open fail", err)
 		}
