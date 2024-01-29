@@ -20,7 +20,7 @@ GOOS=linux CGO_ENABLED=0 go build main.go
 
 ### Zip for lambda
 ```
-zip -r  video-watermark.zip main logo.png
+zip -r  video-watermark.zip main assets
 ```
 
 ### Resources

@@ -8,6 +8,9 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"net/url"
+	"strings"
+	"video-watermark-ffmpeg/logo"
 
 	"log"
 	"os"
@@ -18,19 +21,23 @@ import (
 //doc : https://docs.aws.amazon.com/zh_cn/lambda/latest/dg/golang-package.html#golang-package-libraries
 //ffmpeg aws lambda layer 层： https://github.com/rpidanny/ffmpeg-lambda-layer
 
-//水印在s3里面存放的前缀目录，比如以前的key=feed/sss.jpg ; 需要拼接为 key=watermark/feed/sss.jpg
-//The prefix directory where the watermark is stored in s3, such as the previous key=feed/sss.jpg; It needs to be spliced as key=watermark/feed/sss.jpg
+// 水印在s3里面存放的前缀目录，比如以前的key=feed/sss.jpg ; 需要拼接为 key=watermark/feed/sss.jpg
+// The prefix directory where the watermark is stored in s3, such as the previous key=feed/sss.jpg; It needs to be spliced as key=watermark/feed/sss.jpg
 var watermarkPrefixPath = "watermark/"
 
-//视频下载和生成的存放目录
-//Storage directory for video download and generation
+// 视频下载和生成的存放目录
+// Storage directory for video download and generation
 var savePath = "/tmp"
 
 // RequestData 请求的json数据
 type RequestData struct {
-	Channel string `json:"channel"`
-	Name    string `json:"name"`
-	Key     string `json:"key"`
+	Channel   string `json:"channel"`
+	Name      string `json:"name"`
+	Key       string `json:"key"`
+	FileW     int    `json:"file_w"`    //key 宽
+	FileH     int    `json:"file_h"`    //key 高
+	FontSize  string `json:"fontsize"`  //字体大小。默认15
+	FontColor string `json:"fontcolor"` //字体颜色，默认白色
 }
 
 var (
@@ -71,8 +78,6 @@ func init() {
 	}
 	//cdnDomain = os.Getenv("CdnDomain")
 	//if cdnDomain == "" {
-	//  你还没有CdnDomain
-	//	log.Fatalln("You don't have Cdn Domain")
 	//	return
 	//}
 	awsRegion = os.Getenv("AwsRegion")
@@ -88,20 +93,35 @@ func main() {
 }
 
 func HandleLambdaEvent(event RequestData) (ResponseData, error) {
-	//ffmpeg -i "https://cdn.google.live/video/75an099hrpb6od35elqopnceah-1670826684781993072384.mp4" -i "https://cdn.google.live/lambda/google-logo%401x.png"  -filter_complex "overlay=10:10" 1.mp4
+	//完整的视频URL
 	key := event.Key
-	//videoUrl := "https://cdn.google.live/video/75an099hrpb6od35elqopnceah-1670826684781993072384.mp4"
-	//下载到临时文件夹(Download to temporary folder)
-	log.Println("#####start video url=" + key)
-	tmpPath := savePath + "/tmp-" + path.Base(key)
-	errDownload := downFileFromAwsS3(key, tmpPath)
-	if errDownload != nil {
-		log.Fatalln("download fail,key = "+key, errDownload)
+	username := event.Name
+	log.Println("#####start video url=" + key + ",name=" + username)
+	logoUrl := savePath + "/assets/video-logo.png"
+	if len(username) > 0 {
+		//logo下面有文字需要生成新的logo图片
+		t := logo.TextInfo{Text: username, Size: 15, YOffset: 6}
+		t.XOffset = len(t.Text) * 6
+		videoImgSource, err := os.Open("./assets/video-logo.png")
+		if err != nil {
+			log.Fatalln("assets/video-logo.png open fail", err)
+		}
+		defer videoImgSource.Close()
+		//获取添加文字后的url路径
+		logoUrl = t.AddTextToLogo(videoImgSource)
+		if event.FileW > 0 && event.FileH > 0 {
+			//按比例缩小
+			logoUrl, err = logo.PngResize(logoUrl, event.FileH)
+			if err != nil {
+				log.Println("logo.PngResize fail", err)
+			}
+		}
 	}
-	logoUrl := "logo.png"
+	log.Println("(1)logo path:" + logoUrl)
+	pathBase := path.Base(key)
+	newSavePath := savePath + "/" + pathBase
+	cmd := exec.Command("ffmpeg", "-i", key, "-i", logoUrl, "-filter_complex", "overlay=10:10", "-y", newSavePath)
 
-	newSavePath := savePath + "/" + path.Base(key)
-	cmd := exec.Command("ffmpeg", "-i", tmpPath, "-i", logoUrl, "-filter_complex", "overlay=10:10", newSavePath)
 	var out bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &out
@@ -112,9 +132,9 @@ func HandleLambdaEvent(event RequestData) (ResponseData, error) {
 		log.Println("ffmpeg run error: " + key)
 		log.Fatalln(err)
 	}
-	log.Println("watermark file path : " + newSavePath)
-
-	newKey := upLoadToAwsS3(newSavePath, key)
+	log.Println("(2)watermark file path : " + newSavePath)
+	urlS3Key := getS3Key(key, pathBase)
+	newKey := upLoadToAwsS3(newSavePath, urlS3Key)
 	return ResponseData{Body: BodyData{Data: newKey}}, nil
 }
 
@@ -150,10 +170,17 @@ func upLoadToAwsS3(newSavePath string, oldS3Key string) string {
 	return newKey
 }
 
-/**
- * 下载aws s3中的文件
- * Download files in aws s3
- */
+/*
+*
+  - 下载aws s3中的文件
+  - Download files in aws s3
+  - for example
+  - tmpPath := savePath + "/tmp-" + path.Base(key)
+  - errDownload := downFileFromAwsS3(key, tmpPath)
+  - if errDownload != nil {
+  - log.Fatalln("download fail,key = "+key, errDownload)
+  - }
+*/
 func downFileFromAwsS3(key string, tmpPath string) (err error) {
 	sess := session.Must(session.NewSession(
 		&aws.Config{
@@ -179,4 +206,20 @@ func downFileFromAwsS3(key string, tmpPath string) (err error) {
 	}
 	log.Println("Downloaded success ! ", file.Name(), numBytes, "bytes")
 	return nil
+}
+
+func getS3Key(urlString string, pathBase string) string {
+	// 解析URL
+	parsedURL, err := url.Parse(urlString)
+	if err != nil {
+		return pathBase
+	}
+
+	// 获取路径部分（去掉域名）
+	path2 := parsedURL.Path
+	if path2 == "" {
+		path2 = parsedURL.EscapedPath()
+	}
+	path2 = strings.TrimLeft(path2, "/")
+	return path2
 }
