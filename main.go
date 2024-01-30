@@ -33,6 +33,8 @@ var savePath = "/tmp"
 type RequestData struct {
 	Channel   string `json:"channel"`
 	Name      string `json:"name"`
+	YOffset   int    `json:"y_offset"` //name y轴偏移
+	XOffset   int    `json:"x_offset"` //name x轴偏移
 	Key       string `json:"key"`
 	FileW     int    `json:"file_w"`    //key 宽
 	FileH     int    `json:"file_h"`    //key 高
@@ -100,8 +102,16 @@ func HandleLambdaEvent(event RequestData) (ResponseData, error) {
 	logoUrl := "./assets/video-logo.png"
 	if len(username) > 0 {
 		//logo下面有文字需要生成新的logo图片
-		t := logo.TextInfo{Text: username, Size: 15, YOffset: 6}
-		t.XOffset = len(t.Text) * 6
+		defaultYOffset := 6
+		if event.YOffset > 0 {
+			defaultYOffset = event.YOffset
+		}
+		defaultXOffset := 0
+		if event.XOffset > 0 {
+			defaultXOffset = event.XOffset
+		}
+		t := logo.TextInfo{Text: username, Size: 15, YOffset: defaultYOffset}
+		t.XOffset = len(t.Text)*6 + defaultXOffset
 		videoImgSource, err := os.Open(logoUrl)
 		if err != nil {
 			log.Fatalln("assets/video-logo.png open fail", err)
@@ -119,8 +129,27 @@ func HandleLambdaEvent(event RequestData) (ResponseData, error) {
 	}
 	log.Println("(1)logo path:" + logoUrl)
 	pathBase := path.Base(key)
+	//判断是不是全地址还是 aws s3 key
+	isHttpUrl := strings.HasPrefix(key, "http")
+	//ffmpeg input video path
+	inputVideoPath := key
+	//new video s3 key
+	urlS3Key := ""
+	if !isHttpUrl {
+		log.Println("(1.1)start download video,key=" + key)
+		//download by s3 key
+		tmpPath := savePath + "/tmp-" + pathBase
+		errDownload := downFileFromAwsS3(key, tmpPath)
+		if errDownload != nil {
+			log.Fatalln("video download fail,key = "+key, errDownload)
+		}
+		inputVideoPath = tmpPath
+		urlS3Key = key
+	} else {
+		urlS3Key = getS3Key(key, pathBase)
+	}
 	newSavePath := savePath + "/" + pathBase
-	cmd := exec.Command("ffmpeg", "-i", key, "-i", logoUrl, "-filter_complex", "overlay=10:10", "-y", newSavePath)
+	cmd := exec.Command("ffmpeg", "-i", inputVideoPath, "-i", logoUrl, "-filter_complex", "overlay=10:10", "-y", newSavePath)
 
 	var out bytes.Buffer
 	var stderr bytes.Buffer
@@ -133,7 +162,6 @@ func HandleLambdaEvent(event RequestData) (ResponseData, error) {
 		log.Fatalln(err)
 	}
 	log.Println("(2)watermark file path : " + newSavePath)
-	urlS3Key := getS3Key(key, pathBase)
 	newKey := upLoadToAwsS3(newSavePath, urlS3Key)
 	return ResponseData{Body: BodyData{Data: newKey}}, nil
 }
