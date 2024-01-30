@@ -185,7 +185,9 @@ func upLoadToAwsS3(newSavePath string, oldS3Key string) string {
 	}
 	defer fb.Close()
 	newKey := watermarkPrefixPath + key
-	uploader := s3manager.NewUploader(sess)
+	uploader := s3manager.NewUploader(sess, func(u *s3manager.Uploader) {
+		u.PartSize = 5 * 1024 * 1024 // 5MB per part
+	})
 	_, err2 := uploader.Upload(&s3manager.UploadInput{
 		Bucket: aws.String(s3Bucket),
 		Key:    aws.String(newKey),
@@ -217,8 +219,8 @@ func downFileFromAwsS3(key string, tmpPath string) (err error) {
 		}),
 	)
 	downloader := s3manager.NewDownloader(sess, func(d *s3manager.Downloader) {
-		d.PartSize = 10 * 1024 * 1024 // 10MB per part
-		d.Concurrency = 4
+		d.PartSize = 5 * 1024 * 1024 // 5MB per part
+		//d.Concurrency = 4
 	})
 	file, err := os.Create(tmpPath)
 	if err != nil {
